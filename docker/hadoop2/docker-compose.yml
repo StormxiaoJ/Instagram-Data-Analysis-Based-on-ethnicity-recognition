@@ -1,0 +1,58 @@
+version: '2'
+services:
+  hadoop-spark-slave1:
+    image: myos6-hadoop-spark
+    container_name: hs-slave1
+    volumes:
+      - "./volume/hadoop/work/slave1:/works"
+      - "./volume/hadoop/logs/slave1:/root/hadoop/logs/"
+      - "./volume/spark/logs/slave1:/root/spark/logs/"
+      - "./volume/ro_data:/ro_data:ro"
+    hostname: hs-slave1
+    networks:
+      spark:
+        aliases: 
+          - hs-slave1
+    tty: true
+  
+  hadoop-spark-slave2:
+    image: myos6-hadoop-spark
+    container_name: hs-slave2
+    volumes:
+      - "./volume/hadoop/work/slave2:/works"
+      - "./volume/hadoop/logs/slave2:/root/hadoop/logs/"
+      - "./volume/spark/logs/slave2:/root/spark/logs/"
+      - "./volume/ro_data:/ro_data:ro"
+    hostname: hs-slave2
+    networks:
+      spark:
+        aliases: 
+          - hs-slave2
+    tty: true
+
+  hadoop-spark-master:
+    image: myos6-hadoop-spark
+    ports:
+      - "50070:50070"
+      - "8088:8088"
+      - "8080:8080"
+      - "8042:8042"
+    volumes:
+      - "./volume/hadoop/work/master:/works"
+      - "./volume/hadoop/logs/master:/root/hadoop/logs/"
+      - "./volume/spark/logs/master:/root/spark/logs/"
+      - "./volume/code:/code"
+      - "./volume/ro_data:/ro_data:ro"
+    container_name: hs-master
+    hostname: hs-master
+    links:
+      - hadoop-spark-slave1
+      - hadoop-spark-slave2
+    networks:
+      spark:
+        aliases: 
+          - hs-master
+    tty: true
+
+networks:
+  spark:

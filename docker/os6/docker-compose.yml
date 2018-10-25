@@ -1,0 +1,27 @@
+version: '2'
+services:
+  vm1: 
+    image: myos6
+    container_name: vm1
+    hostname: vm1
+    tty: true
+    ports:
+      - "2201:22"
+  vm2: 
+    image: myos6
+    container_name: vm2
+    hostname: vm2
+    tty: true
+    depends_on:
+      - vm1
+    ports:
+      - "2202:22"
+  vm3: 
+    image: myos6
+    container_name: vm3
+    hostname: vm3
+    tty: true
+    depends_on:
+      - vm2
+    ports:
+      - "2203:22"
