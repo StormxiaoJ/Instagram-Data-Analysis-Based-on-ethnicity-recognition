@@ -1,0 +1,75 @@
+---
+- hosts: instanceGroup
+  remote_user: "{{ remote_user }}"
+  become: yes
+  tasks:
+    - name: Check spark file
+      stat: 
+        path: {{ source_dir }}/spark-2.3.1-bin-hadoop2.7.tgz
+      register: downloaded
+
+    - name: Download spark
+      get_url: 
+        url: 'http://www.strategylions.com.au/mirror/spark/spark-2.3.1/spark-2.3.1-bin-hadoop2.7.tgz'
+        dest: {{ source_dir }}
+      when: downloaded.stat.exists == false
+
+    - name: Unpack spark source code
+      unarchive: 
+        src: {{ source_dir }}/spark-2.3.1-bin-hadoop2.7.tgz
+        dest: {{ service_dir }}
+        remote_src: yes
+
+    - name: Add SPARK_HOME
+      lineinfile:
+        dest: /home/ubuntu/.bashrc
+        insertafter: 'EOF'  
+        line: 'export SPARK_HOME={{ service_dir }}/spark-{{ spark_version }}-bin-hadoop2.7'
+
+    - name: Add path
+      lineinfile: 
+        dest: /home/ubuntu/.bashrc
+        insertafter: 'EOF'  
+        line: 'export PATH="$PATH:{{ service_dir }}/spark-{{ spark_version }}-bin-hadoop2.7/bin"' 
+        state: present
+
+    - name: Refresh.bashrc
+      shell: source /home/ubuntu/.bashrc
+      args: 
+        executable: /bin/bash
+
+    - name: Generate spark-env.sh for spark
+      template: 
+        src: spark-env.j2 
+        dest: {{ service_dir }}/spark-{{ spark_version }}-bin-hadoop2.7/conf/spark-env.sh 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate hive-site.j2 for spark
+      template: 
+        src: hive-site.j2 
+        dest: {{ service_dir }}/spark-{{ spark_version }}-bin-hadoop2.7/conf/hive-site.xml 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+- hosts: masterGroup
+  remote_user: "{{ remote_user }}"
+  become: yes
+  tasks:
+  - name: start the spark master
+    command: {{ service_dir }}/spark-{{ spark_version }}-bin-hadoop2.7/sbin/start-master.sh
+    environment:
+      SPARK_LOG_DIR: "{{ service_dir }}/spark/log"
+      SPARK_WORKER_DIR: "{{ service_dir }}/spark/work"
+      SPARK_LOCAL_DIRS: "{{ service_dir }}/spark/data"
+
+- hosts: slaveGroup
+  remote_user: "{{ remote_user }}"
+  become: yes
+  tasks:
+  - name: start the spark slaves
+    action: command {{ service_dir }}/spark-{{ spark_version }}-bin-hadoop2.7/sbin/start-slave.sh spark://{{ spark_master_host }}:7077
+    environment:
+      SPARK_LOG_DIR: "{{ service_dir }}/spark/log"
+      SPARK_WORKER_DIR: "{{ service_dir }}/spark/work"
+      SPARK_LOCAL_DIRS: "{{ service_dir }}/spark/data"

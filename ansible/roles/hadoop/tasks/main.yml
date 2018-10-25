@@ -1,0 +1,127 @@
+---
+- hosts: instanceGroup
+  remote_user: "{{ remote_user }}"
+  become: yes
+  tasks:
+    - name: Check hadoop file
+      stat: 
+        path: {{ source_dir }}/hadoop-2.9.1.tar.gz
+      register: downloaded
+
+    - name: Download hadoop
+      get_url: 
+        url: 'http://apache.mirror.amaze.com.au/hadoop/common/hadoop-2.9.1/hadoop-2.9.1.tar.gz'
+        dest: {{ source_dir }}
+      when: downloaded.stat.exists == false
+
+    - name: Unpack hadoop source code
+      unarchive: 
+        src: {{ source_dir }}/hadoop-2.9.1.tar.gz
+        dest: {{ service_dir }}
+        remote_src: yes
+
+    - name: Add HADOOP_HOME
+      lineinfile:
+        dest: /home/ubuntu/.bashrc
+        insertafter: 'EOF'  
+        line: 'export HADOOP_HOME={{ service_dir }}/hadoop-{{ hadoop_version }}'
+
+    - name: Add path
+      lineinfile: 
+        dest: /home/ubuntu/.bashrc
+        insertafter: 'EOF'  
+        line: 'export PATH="$PATH:{{ service_dir }}/hadoop-{{ hadoop_version }}/bin"' 
+        state: present
+
+    - name: Refresh.bashrc
+      shell: source /home/ubuntu/.bashrc
+      args: 
+        executable: /bin/bash
+
+    - name: Generate hadoop-env.sh for hadoop
+      template: 
+        src: hadoop-env.j2 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/hadoop-env.sh 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate core-site.xml for hadoop
+      template: 
+        src: core-site.j2 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/core-site.xml 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate slaves for hadoop
+      template: 
+        src: templates/slaves 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/slaves 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate hdfs-site.xml for hadoop
+      template: 
+        src: hdfs-site.j2 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/hdfs-site.xml 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate yarn-env.sh for hadoop
+      template: 
+        src: yarn-env.j2 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/yarn-env.sh 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate yarn-site.xml for hadoop
+      template: 
+        src: yarn-site.j2 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/yarn-site.xml 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate mapred-site.xml for hadoop
+      template: 
+        src: mapred-site.j2 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/mapred-site.xml 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate capacity-scheduler.xml for hadoop
+      template: 
+        src: capacity-scheduler.xml 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/capacity-scheduler.xml 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: Generate hive-site.j2 for hadoop
+      template: 
+        src: hive-site.j2 
+        dest: {{ service_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop/hive-site.xml 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+- hosts: masterGroup
+  remote_user: "{{ remote_user }}"
+  become: yes
+  tasks:
+  - name: Format the hdfs filesystem
+    command: {{ service_dir }}/hadoop-{{ hadoop_version }}/bin/hdfs namenode -format cluster
+
+  - name: start the hdfs namenode
+    command: {{ service_dir }}/hadoop-{{ hadoop_version }}/sbin/hadoop-daemon.sh --script hdfs start namenode
+
+  - name: start the hdfs secondarynamenode
+    command: {{ service_dir }}/hadoop-{{ hadoop_version }}/sbin/hadoop-daemon.sh start secondarynamenode
+
+  - name: start the yarn resourcemanager
+    command: {{ service_dir }}/hadoop-{{ hadoop_version }}/sbin/yarn-daemon.sh start resourcemanager
+
+- hosts: slaveGroup
+  remote_user: "{{ remote_user }}"
+  become: yes
+  tasks:
+  - name: start the yarn nodemanagers
+    command: {{ service_dir }}/hadoop-{{ hadoop_version }}/sbin/yarn-daemon.sh start nodemanager
+  - name: start the hdfs datanodes
+    command: {{ service_dir }}/hadoop-{{ hadoop_version }}/sbin/hadoop-daemon.sh --script hdfs start datanode

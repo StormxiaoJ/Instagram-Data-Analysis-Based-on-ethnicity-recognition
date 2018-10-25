@@ -1,0 +1,13 @@
+source_dir: /home/project
+service_dir: /home/project/services
+data_dir: /home/project/data
+hadoop_version: 2.9.1
+hive_version: 2.3.3
+spark_version: 2.3.1-bin-hadoop2.7
+hbase_version: 2.1.0
+namenode_host: slaveGroup
+mysql_root_pass: root
+spark_master_host: masterGroup
+remote_user: ubuntu
+master_ip: 139.129.128.187
+phoenix_version: 5.0.0-HBase-2.0

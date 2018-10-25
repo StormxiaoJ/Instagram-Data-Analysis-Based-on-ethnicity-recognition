@@ -1,0 +1,75 @@
+- name: Launch the first instance
+  os_server:
+    state: present
+    auth:
+      auth_url: https://keystone.rc.nectar.org.au:5000/v3/
+      username: z.guan5@student.unimelb.edu.au
+      password: YjAyYjM0YzhiZTY5ZDk2
+      project_name: InsSpark
+    name: "master"
+    image: NeCTAR Ubuntu 18.04 LTS (Bionic) amd64
+    key_name: "jy"
+    availability_zone: melbourne
+    timeout: 200
+    flavor: "1"
+    security_groups: default,docker,hadoop
+  register: masterInstance
+
+- name: Launch the rest instance(s)
+  os_server:
+    state: present
+    auth:
+      auth_url: https://keystone.rc.nectar.org.au:5000/v3/
+      username: z.guan5@student.unimelb.edu.au
+      password: YjAyYjM0YzhiZTY5ZDk2
+      project_name: InsSpark
+    name: "{{item}}"
+    image: NeCTAR Ubuntu 18.04 LTS (Bionic) amd64
+    key_name: "jy"
+    availability_zone: melbourne
+    timeout: 200
+    flavor: "1"
+    security_groups: default,docker,hadoop
+  with_sequence: start=1 end={{num}} format=slave%x
+  register: slaveInstances
+
+# - name: Create volume
+#   os_volume:
+#     auth:
+#       auth_url: https://keystone.rc.nectar.org.au:5000/v3/
+#       username: z.guan5@student.unimelb.edu.au
+#       password: YjAyYjM0YzhiZTY5ZDk2
+#       project_name: InsSpark
+#     state: present
+#     availability_zone: melbourne
+#     size: "{{volume}}"
+#     display_name: "{{item}}"
+#   with_sequence: start=0 end={{num}} format=volume%x
+
+# - name: Attach volume to instance
+#   os_server_volume:
+#     auth:
+#       auth_url: https://keystone.rc.nectar.org.au:5000/v3/
+#       username: z.guan5@student.unimelb.edu.au
+#       password: YjAyYjM0YzhiZTY5ZDk2
+#       project_name: InsSpark
+#     state: present
+#     server: "node{{item}}"
+#     volume: "volume{{item}}"
+#   with_sequence: start=0 end={{num}}
+  
+- name: Let the first to be master node
+  add_host:
+    hostname: "{{item.openstack.interface_ip}}"
+    groups:
+      - instanceGroup
+      - masterGroup
+  with_items: "{{masterInstance.results}}"
+
+- name: Let the rest to be slave nodes
+  add_host:
+    hostname: "{{item.openstack.interface_ip}}"
+    groups: 
+      - instanceGroup
+      - slaveGroup
+with_items: "{{slaveInstances.results}}"

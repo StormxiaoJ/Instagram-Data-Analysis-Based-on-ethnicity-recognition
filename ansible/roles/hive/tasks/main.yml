@@ -1,0 +1,133 @@
+---
+- hosts: instanceGroup
+  remote_user: "{{ remote_user }}"
+  become: yes
+  vars: 
+    mysql_root_password: carrymefly
+  tasks:
+    - name: Check hive file
+      stat: 
+        path: {{ source_dir }}/apache-hive-2.3.3-bin.tar.gz
+      register: downloaded
+
+    - name: Download hive
+      get_url: 
+        url: 'http://apache.mirror.digitalpacific.com.au/hive/hive-2.3.3/apache-hive-2.3.3-bin.tar.gz'
+        dest: {{ source_dir }}
+      when: downloaded.stat.exists == false
+
+    - name: Unpack hive source code
+      unarchive: 
+        src: {{ source_dir }}/apache-hive-2.3.3-bin.tar.gz
+        dest: {{ service_dir }}
+        remote_src: yes
+
+    - name: Specify MySQL root password before installing
+      debconf: name='mysql-server' question='mysql-server/root_password' value='{{mysql_root_password | quote}}' vtype='password'
+      become: true
+
+    - name: Confirm MySQL root password before installing
+      debconf: name='mysql-server' question='mysql-server/root_password_again' value='{{mysql_root_password | quote}}' vtype='password'
+      become: true
+
+    - name: Install software
+      apt: name={{item}}
+      with_items: 
+          - mysql-server
+          - python-mysqldb
+          - mysql-client
+      force: yes
+      update_cache: yes
+      state: latest
+
+    - name: Deletes anonymous MySQL server user for localhost
+      mysql_user: 
+        name: "" 
+        state: absent 
+        host_all: yes
+        login_user: root
+        login_password: "{{ mysql_root_password }}" 
+
+    - name: update mysql root password for all root accounts
+      mysql_user: 
+        name: root 
+        host: {{ item }} 
+        with_items:
+          - 127.0.0.1
+          - ::1
+          - localhost
+        password: {{ mysql_root_password }}
+        when: ansible_hostname == 'localhost'
+
+    - name: Removes the MySQL test database
+      mysql_db: 
+        name: test 
+        state: absent 
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: ensure mysql is running (and enable it at boot)
+      service: name=mysqld state=started enabled=yes
+
+    - name: create database for hive
+      mysql_db: 
+        name: hive 
+        state: present 
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: create user for hive
+      mysql_user: 
+        name: hive 
+        password: {{ mysql_root_password }} 
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        priv: hive.*:w 
+        state: present
+
+    - name: Add HIVE_HOME
+      lineinfile:
+        dest: /home/ubuntu/.bashrc
+        insertafter: 'EOF'  
+        line: 'export HIVE_HOME={{ service_dir }}/apache-hive-2.3.3-bin'
+
+    - name: Add path
+      lineinfile: 
+        dest: /home/ubuntu/.bashrc
+        insertafter: 'EOF'  
+        line: 'export PATH="$PATH:{{ service_dir }}/apache-hive-2.3.3-bin/bin"' 
+        state: present
+
+    - name: Refresh.bashrc
+      shell: source /home/ubuntu/.bashrc
+      args: 
+        executable: /bin/bash
+
+    - name: Generate hive-site.xml for hive
+      template: 
+        src: hive-site.j2 
+        dest: {{ service_dir }}/apache-hive-{{ hive_version }}-bin/conf/hive-site.xml
+        owner: {{ remote_user }} 
+        mode: 0644
+
+    - name: put mysql driver into hive classpath
+      copy: 
+        src: mysql-connector-java-5.1.46.jar 
+        dest: {{ service_dir }}/apache-hive-{{ hive_version }}-bin/lib/mysql-connector-java-5.1.46.jar 
+        owner: {{ remote_user }} 
+        mode: 0644
+
+- hosts: masterGroup
+  remote_user: "{{ remote_user }}"
+  become: yes
+  tasks:
+  - name: Creates directory for log files
+    file: 
+      path: {{ data_dir }}/hive/log
+      state: directory
+      mode: 0755
+  - name: start the hive metastore service
+    shell: nohup {{ service_dir }}/apache-hive-{{ hive_version }}-bin/bin/hive --service metastore > {{ data_dir }}/hive/log/metastore.log 2>&1 &
+
+  - name: start the spark master
+    shell: nohup {{ service_dir }}/apache-hive-{{ hive_version }}-bin/bin/hive --service hiveserver2 > {{ data_dir }}/hive/log/hiveserver2.log 2>&1 &
